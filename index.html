@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Superstore Dashboard</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background-color: #f9f9f9; }
+        h1 { text-align: center; color: #333; }
+        .controls { display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 20px; justify-content: center; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        select, button { padding: 8px 12px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #e0e0e0; }
+        #chart-container { display: flex; justify-content: center; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .bar { fill: #4a90e2; transition: fill 0.3s, opacity 0.3s; cursor: pointer; }
+        .bar:hover { opacity: 0.8; }
+        .bar.selected { fill: #e94e77; stroke: #333; stroke-width: 2px; }
+        .axis-label { font-size: 12px; font-weight: bold; }
+        .tooltip { position: absolute; text-align: left; padding: 10px; background: rgba(0, 0, 0, 0.8); color: white; border-radius: 4px; pointer-events: none; opacity: 0; font-size: 13px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        #summary-panel { margin-top: 20px; padding: 15px; background: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center; font-size: 16px; font-weight: bold; color: #555; }
+    </style>
+</head>
+<body>
+
+    <h1>Superstore Performance Dashboard</h1>
+
+    <div class="controls">
+        <div>
+            <label for="regionFilter"><strong>Filter (Region):</strong> </label>
+            <select id="regionFilter">
+                <option value="All">All Regions</option>
+                <option value="East">East</option>
+                <option value="West">West</option>
+                <option value="Central">Central</option>
+                <option value="South">South</option>
+            </select>
+        </div>
+        <div>
+            <label for="metricEncode"><strong>Encode (Metric):</strong> </label>
+            <select id="metricEncode">
+                <option value="Sales">Sales ($)</option>
+                <option value="Profit">Profit ($)</option>
+                <option value="Quantity">Quantity</option>
+            </select>
+        </div>
+        <div>
+            <button id="toggleLevel"><strong>Abstract:</strong> View by Sub-Category</button>
+            <button id="sortBtn"><strong>Reconfigure:</strong> Sort Ascending</button>
+        </div>
+    </div>
+
+    <div id="chart-container"></div>
+    <div id="summary-panel">Select a bar to connect and view detailed performance statistics.</div>
+    <div class="tooltip" id="tooltip"></div>
+
+    <script>
+        // Set dimensions
+        const margin = {top: 40, right: 30, bottom: 100, left: 80},
+              width = 900 - margin.left - margin.right,
+              height = 500 - margin.top - margin.bottom;
+
+        const svg = d3.select("#chart-container")
+          .append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+          .append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+
+        const tooltip = d3.select("#tooltip");
+        const summaryPanel = d3.select("#summary-panel");
+
+        let rawData = [];
+        let currentMetric = "Sales";
+        let currentLevel = "Category";
+        let currentRegion = "All";
+        let isAscending = false;
+
+        // Scales
+        const x = d3.scaleBand().range([0, width]).padding(0.2);
+        const y = d3.scaleLinear().range([height, 0]);
+
+        const xAxis = svg.append("g").attr("transform", `translate(0,${height})`);
+        const yAxis = svg.append("g");
+
+        // Load data
+        d3.csv("superstore.csv").then(function(data) {
+            // Clean data
+            data.forEach(d => {
+                d.Sales = +d.Sales;
+                d.Profit = +d.Profit;
+                d.Quantity = +d.Quantity;
+            });
+            rawData = data;
+            updateChart();
+        });
+
+        function updateChart() {
+            // 1. Filter
+            let filteredData = rawData;
+            if (currentRegion !== "All") {
+                filteredData = filteredData.filter(d => d.Region === currentRegion);
+            }
+
+            // 2. Abstract (Rollup by Category or Sub-Category)
+            let rolledUp = d3.rollup(filteredData, 
+                v => d3.sum(v, d => d[currentMetric]), 
+                d => d[currentLevel]
+            );
+
+            let chartData = Array.from(rolledUp, ([key, value]) => ({key, value}));
+
+            // 3. Reconfigure (Sort)
+            chartData.sort((a, b) => isAscending ? a.value - b.value : b.value - a.value);
+
+            // Update Domains
+            x.domain(chartData.map(d => d.key));
+            y.domain([0, d3.max(chartData, d => d.value) * 1.1]); // 10% padding
+
+            // Render Axes
+            xAxis.transition().duration(1000).call(d3.axisBottom(x))
+                .selectAll("text")
+                .attr("transform", "translate(-10,0)rotate(-45)")
+                .style("text-anchor", "end")
+                .style("font-size", "12px");
+            
+            yAxis.transition().duration(1000).call(d3.axisLeft(y).ticks(8));
+
+            // Render Bars
+            const bars = svg.selectAll(".bar").data(chartData, d => d.key);
+
+            bars.enter()
+                .append("rect")
+                .attr("class", "bar")
+                .attr("x", d => x(d.key))
+                .attr("width", x.bandwidth())
+                .attr("y", height)
+                .attr("height", 0)
+                .on("mouseover", function(event, d) {
+                    // Elaborate
+                    tooltip.transition().duration(200).style("opacity", 1);
+                    tooltip.html(`<strong>${d.key}</strong><br/>${currentMetric}: ${d.value.toLocaleString()}`)
+                           .style("left", (event.pageX + 10) + "px")
+                           .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", function() {
+                    tooltip.transition().duration(500).style("opacity", 0);
+                })
+                .on("click", function(event, d) {
+                    // Select
+                    svg.selectAll(".bar").classed("selected", false);
+                    d3.select(this).classed("selected", true);
+                    
+                    // Connect
+                    let itemsInGroup = filteredData.filter(row => row[currentLevel] === d.key).length;
+                    summaryPanel.html(`<span style='color:#e94e77;'>Selected: <strong>${d.key}</strong></span> | Total ${currentMetric}: <strong>${d.value.toLocaleString()}</strong> | Made up of ${itemsInGroup} individual orders.`);
+                })
+                .merge(bars)
+                .transition().duration(1000)
+                .attr("x", d => x(d.key))
+                .attr("width", x.bandwidth())
+                .attr("y", d => y(Math.max(0, d.value)))
+                .attr("height", d => Math.abs(y(0) - y(d.value)));
+
+            bars.exit().transition().duration(500).attr("height", 0).attr("y", height).remove();
+        }
+
+        // Event Listeners
+        d3.select("#regionFilter").on("change", function() {
+            currentRegion = this.value;
+            summaryPanel.text("Select a bar to connect and view detailed performance statistics.");
+            updateChart();
+        });
+
+        d3.select("#metricEncode").on("change", function() {
+            currentMetric = this.value;
+            summaryPanel.text("Select a bar to connect and view detailed performance statistics.");
+            updateChart();
+        });
+
+        d3.select("#toggleLevel").on("click", function() {
+            if (currentLevel === "Category") {
+                currentLevel = "Sub-Category";
+                d3.select(this).html("<strong>Abstract:</strong> View by Category");
+            } else {
+                currentLevel = "Category";
+                d3.select(this).html("<strong>Abstract:</strong> View by Sub-Category");
+            }
+            summaryPanel.text("Select a bar to connect and view detailed performance statistics.");
+            updateChart();
+        });
+
+        d3.select("#sortBtn").on("click", function() {
+            isAscending = !isAscending;
+            d3.select(this).html(`<strong>Reconfigure:</strong> Sort ${isAscending ? 'Descending' : 'Ascending'}`);
+            updateChart();
+        });
+    </script>
+</body>
+</html>
