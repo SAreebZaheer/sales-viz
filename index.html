@@ -6,56 +6,405 @@
     <title>Interactive Superstore Dashboard</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background-color: #f9f9f9; }
-        h1 { text-align: center; color: #333; }
-        .controls { display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 20px; justify-content: center; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        select, button { padding: 8px 12px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; }
-        button:hover { background-color: #e0e0e0; }
-        #chart-container { display: flex; justify-content: center; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        .bar { fill: #4a90e2; transition: fill 0.3s, opacity 0.3s; cursor: pointer; }
-        .bar:hover { opacity: 0.8; }
-        .bar.selected { fill: #e94e77; stroke: #333; stroke-width: 2px; }
-        .axis-label { font-size: 12px; font-weight: bold; }
-        .tooltip { position: absolute; text-align: left; padding: 10px; background: rgba(0, 0, 0, 0.8); color: white; border-radius: 4px; pointer-events: none; opacity: 0; font-size: 13px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-        #summary-panel { margin-top: 20px; padding: 15px; background: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center; font-size: 16px; font-weight: bold; color: #555; }
+        :root {
+            --bg: #f4efe8;
+            --bg-accent: #e7ecf6;
+            --surface: rgba(255, 255, 255, 0.76);
+            --surface-strong: rgba(255, 255, 255, 0.92);
+            --text: #1f2937;
+            --muted: #667085;
+            --border: rgba(31, 41, 55, 0.08);
+            --shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
+            --primary: #2563eb;
+            --primary-soft: rgba(37, 99, 235, 0.12);
+            --accent: #f97316;
+            --accent-soft: rgba(249, 115, 22, 0.14);
+            --selected: #ec4899;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            color: var(--text);
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            background:
+                radial-gradient(circle at top left, rgba(249, 115, 22, 0.18), transparent 30%),
+                radial-gradient(circle at top right, rgba(37, 99, 235, 0.18), transparent 34%),
+                linear-gradient(180deg, var(--bg) 0%, #fbfaf8 40%, var(--bg-accent) 100%);
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background-image: linear-gradient(rgba(255, 255, 255, 0.24) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.24) 1px, transparent 1px);
+            background-size: 56px 56px;
+            mask-image: radial-gradient(circle at center, black, transparent 85%);
+            opacity: 0.28;
+        }
+
+        .page-shell {
+            width: min(1200px, calc(100% - 32px));
+            margin: 28px auto 36px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero {
+            background: linear-gradient(135deg, rgba(17, 24, 39, 0.96), rgba(30, 41, 59, 0.92));
+            color: white;
+            border-radius: 28px;
+            padding: 30px 32px 28px;
+            box-shadow: var(--shadow);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .hero::after {
+            content: "";
+            position: absolute;
+            inset: auto -140px -170px auto;
+            width: 320px;
+            height: 320px;
+            background: radial-gradient(circle, rgba(249, 115, 22, 0.35), transparent 64%);
+            pointer-events: none;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.72);
+            margin-bottom: 14px;
+        }
+
+        .eyebrow::before {
+            content: "";
+            width: 10px;
+            height: 10px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, var(--accent), #facc15);
+            box-shadow: 0 0 0 8px rgba(249, 115, 22, 0.14);
+        }
+
+        h1 {
+            margin: 0;
+            font-size: clamp(2.1rem, 4vw, 3.7rem);
+            line-height: 0.98;
+            letter-spacing: -0.04em;
+        }
+
+        .hero-copy {
+            max-width: 760px;
+            margin: 16px 0 0;
+            color: rgba(255, 255, 255, 0.76);
+            font-size: 1.02rem;
+            line-height: 1.6;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
+            margin: 18px 0 18px;
+            padding: 18px;
+            background: var(--surface);
+            backdrop-filter: blur(18px);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            box-shadow: var(--shadow);
+        }
+
+        .control-card {
+            padding: 14px 15px 15px;
+            border-radius: 18px;
+            background: var(--surface-strong);
+            border: 1px solid rgba(255, 255, 255, 0.72);
+            box-shadow: 0 10px 20px rgba(15, 23, 42, 0.05);
+        }
+
+        .control-card label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 12px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        .select-row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        select,
+        button {
+            appearance: none;
+            padding: 12px 14px;
+            font-size: 14px;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            border-radius: 14px;
+            cursor: pointer;
+            background: white;
+            color: var(--text);
+            transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, background-color 180ms ease;
+        }
+
+        select {
+            width: 100%;
+            background-image: linear-gradient(45deg, transparent 50%, #64748b 50%), linear-gradient(135deg, #64748b 50%, transparent 50%);
+            background-position: calc(100% - 20px) calc(50% - 3px), calc(100% - 14px) calc(50% - 3px);
+            background-size: 6px 6px, 6px 6px;
+            background-repeat: no-repeat;
+            padding-right: 38px;
+        }
+
+        button {
+            font-weight: 700;
+            background: linear-gradient(135deg, #ffffff, #f8fafc);
+            box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
+        }
+
+        button:hover,
+        select:hover {
+            transform: translateY(-1px);
+            border-color: rgba(37, 99, 235, 0.35);
+            box-shadow: 0 16px 26px rgba(15, 23, 42, 0.12);
+        }
+
+        button:active,
+        select:active {
+            transform: translateY(0);
+        }
+
+        #toggleLevel,
+        #sortBtn {
+            width: 100%;
+            text-align: left;
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(249, 115, 22, 0.08));
+            border-color: rgba(37, 99, 235, 0.16);
+        }
+
+        #chart-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 18px 14px 8px;
+            background: var(--surface);
+            backdrop-filter: blur(18px);
+            border-radius: 28px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+            overflow-x: auto;
+        }
+
+        svg {
+            display: block;
+        }
+
+        .axis path,
+        .axis line {
+            stroke: rgba(100, 116, 139, 0.18);
+        }
+
+        .axis text {
+            fill: #475569;
+            font-size: 12px;
+        }
+
+        .bar {
+            fill: url(#barGradient);
+            transition: fill 0.3s, opacity 0.3s, transform 0.3s;
+            cursor: pointer;
+            rx: 10;
+            ry: 10;
+            filter: drop-shadow(0 10px 18px rgba(37, 99, 235, 0.18));
+        }
+
+        .bar:hover {
+            opacity: 0.92;
+            transform: translateY(-2px);
+        }
+
+        .bar.selected {
+            fill: var(--selected);
+            stroke: rgba(255, 255, 255, 0.85);
+            stroke-width: 2px;
+        }
+
+        .grid line {
+            stroke: rgba(148, 163, 184, 0.16);
+        }
+
+        .axis-label {
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .tooltip {
+            position: absolute;
+            text-align: left;
+            padding: 12px 14px;
+            background: rgba(15, 23, 42, 0.95);
+            color: white;
+            border-radius: 14px;
+            pointer-events: none;
+            opacity: 0;
+            font-size: 13px;
+            box-shadow: 0 18px 30px rgba(15, 23, 42, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            line-height: 1.45;
+        }
+
+        #summary-panel {
+            margin-top: 18px;
+            padding: 18px 20px;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.84), rgba(255, 255, 255, 0.74));
+            border-radius: 24px;
+            box-shadow: var(--shadow);
+            text-align: center;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .summary-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 12px;
+            margin-right: 10px;
+            border-radius: 999px;
+            background: var(--primary-soft);
+            color: var(--primary);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .summary-chip::before {
+            content: "";
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            background: currentColor;
+        }
+
+        .legend {
+            display: flex;
+            justify-content: flex-end;
+            gap: 14px;
+            margin: 10px 4px 0;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .legend-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .legend-swatch {
+            width: 14px;
+            height: 14px;
+            border-radius: 5px;
+            background: linear-gradient(135deg, #93c5fd, #2563eb);
+            box-shadow: 0 8px 16px rgba(37, 99, 235, 0.2);
+        }
+
+        .legend-swatch.alt {
+            background: linear-gradient(135deg, #fdba74, #f97316);
+        }
+
+        @media (max-width: 900px) {
+            .controls {
+                grid-template-columns: 1fr;
+            }
+
+            .hero {
+                padding: 24px 20px;
+                border-radius: 24px;
+            }
+
+            .page-shell {
+                width: min(100% - 20px, 1200px);
+                margin-top: 12px;
+                margin-bottom: 20px;
+            }
+
+            #chart-container {
+                padding: 12px 8px 6px;
+                border-radius: 22px;
+            }
+
+            .legend {
+                justify-content: center;
+                flex-wrap: wrap;
+            }
+        }
     </style>
 </head>
 <body>
+    <div class="page-shell">
+        <section class="hero">
+            <div class="eyebrow">Interactive Retail Intelligence</div>
+            <h1>Superstore Performance Dashboard</h1>
+            <p class="hero-copy">Explore how categories, regions, and metrics shape performance. The chart responds instantly to filters, lets you switch between category levels, and keeps the best-performing groups in focus.</p>
+        </section>
 
-    <h1>Superstore Performance Dashboard</h1>
+        <div class="controls">
+            <div class="control-card">
+                <label for="regionFilter">Filter Region</label>
+                <select id="regionFilter">
+                    <option value="All">All Regions</option>
+                    <option value="East">East</option>
+                    <option value="West">West</option>
+                    <option value="Central">Central</option>
+                    <option value="South">South</option>
+                </select>
+            </div>
+            <div class="control-card">
+                <label for="metricEncode">Measure Metric</label>
+                <select id="metricEncode">
+                    <option value="Sales">Sales ($)</option>
+                    <option value="Profit">Profit ($)</option>
+                    <option value="Quantity">Quantity</option>
+                </select>
+            </div>
+            <div class="control-card">
+                <label>Chart Controls</label>
+                <div class="select-row">
+                    <button id="toggleLevel"><strong>Abstract:</strong> View by Sub-Category</button>
+                    <button id="sortBtn"><strong>Reconfigure:</strong> Sort Ascending</button>
+                </div>
+            </div>
+        </div>
 
-    <div class="controls">
-        <div>
-            <label for="regionFilter"><strong>Filter (Region):</strong> </label>
-            <select id="regionFilter">
-                <option value="All">All Regions</option>
-                <option value="East">East</option>
-                <option value="West">West</option>
-                <option value="Central">Central</option>
-                <option value="South">South</option>
-            </select>
+        <div id="chart-container"></div>
+        <div class="legend">
+            <span class="legend-item"><span class="legend-swatch"></span>Primary performance</span>
+            <span class="legend-item"><span class="legend-swatch alt"></span>Selected focus</span>
         </div>
-        <div>
-            <label for="metricEncode"><strong>Encode (Metric):</strong> </label>
-            <select id="metricEncode">
-                <option value="Sales">Sales ($)</option>
-                <option value="Profit">Profit ($)</option>
-                <option value="Quantity">Quantity</option>
-            </select>
-        </div>
-        <div>
-            <button id="toggleLevel"><strong>Abstract:</strong> View by Sub-Category</button>
-            <button id="sortBtn"><strong>Reconfigure:</strong> Sort Ascending</button>
-        </div>
+        <div id="summary-panel"><span class="summary-chip">Ready</span>Select a bar to connect and view detailed performance statistics.</div>
     </div>
-
-    <div id="chart-container"></div>
-    <div id="summary-panel">Select a bar to connect and view detailed performance statistics.</div>
     <div class="tooltip" id="tooltip"></div>
 
     <script>
         // Set dimensions
-        const margin = {top: 40, right: 30, bottom: 100, left: 80},
+        const margin = {top: 40, right: 28, bottom: 120, left: 84},
               width = 900 - margin.left - margin.right,
               height = 500 - margin.top - margin.bottom;
 
@@ -65,6 +414,17 @@
             .attr("height", height + margin.top + margin.bottom)
           .append("g")
             .attr("transform", `translate(${margin.left},${margin.top})`);
+
+        const defs = svg.append("defs");
+        const gradient = defs.append("linearGradient")
+            .attr("id", "barGradient")
+            .attr("x1", "0%")
+            .attr("y1", "0%")
+            .attr("x2", "0%")
+            .attr("y2", "100%");
+
+        gradient.append("stop").attr("offset", "0%").attr("stop-color", "#60a5fa");
+        gradient.append("stop").attr("offset", "100%").attr("stop-color", "#2563eb");
 
         const tooltip = d3.select("#tooltip");
         const summaryPanel = d3.select("#summary-panel");
@@ -81,6 +441,8 @@
 
         const xAxis = svg.append("g").attr("transform", `translate(0,${height})`);
         const yAxis = svg.append("g");
+
+        const gridLines = svg.append("g").attr("class", "grid");
 
         // Load data
         d3.csv("superstore.csv").then(function(data) {
@@ -116,6 +478,17 @@
             x.domain(chartData.map(d => d.key));
             y.domain([0, d3.max(chartData, d => d.value) * 1.1]); // 10% padding
 
+            const yTicks = y.ticks(6);
+
+            gridLines
+                .selectAll("line")
+                .data(yTicks)
+                .join("line")
+                .attr("x1", 0)
+                .attr("x2", width)
+                .attr("y1", d => y(d))
+                .attr("y2", d => y(d));
+
             // Render Axes
             xAxis.transition().duration(1000).call(d3.axisBottom(x))
                 .selectAll("text")
@@ -124,6 +497,9 @@
                 .style("font-size", "12px");
             
             yAxis.transition().duration(1000).call(d3.axisLeft(y).ticks(8));
+
+            xAxis.attr("class", "axis");
+            yAxis.attr("class", "axis");
 
             // Render Bars
             const bars = svg.selectAll(".bar").data(chartData, d => d.key);
@@ -152,7 +528,7 @@
                     
                     // Connect
                     let itemsInGroup = filteredData.filter(row => row[currentLevel] === d.key).length;
-                    summaryPanel.html(`<span style='color:#e94e77;'>Selected: <strong>${d.key}</strong></span> | Total ${currentMetric}: <strong>${d.value.toLocaleString()}</strong> | Made up of ${itemsInGroup} individual orders.`);
+                    summaryPanel.html(`<span class='summary-chip'>Selected</span><strong>${d.key}</strong> | Total ${currentMetric}: <strong>${d.value.toLocaleString()}</strong> | Made up of ${itemsInGroup} individual orders.`);
                 })
                 .merge(bars)
                 .transition().duration(1000)
